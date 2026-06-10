@@ -1,0 +1,5 @@
+numpy
+sympy
+plotly
+streamlit>=1.32
+streamlit-ace
