@@ -6,3 +6,4 @@ streamlit-ace
 qiskit>=1.0
 matplotlib
 pylatexenc
+seaborn
