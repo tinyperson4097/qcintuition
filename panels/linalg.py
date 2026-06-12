@@ -4,9 +4,8 @@ import sympy as sp
 import streamlit as st
 
 from basis import state_to_display_coeffs, display_coeffs_to_state
-from validation import is_unitary
-from quantum_core import QuantumSystem, GateOp
-from format_utils import bump_sys, fmt_entry_latex, parse_matrix_code, show_latex
+from quantum_core import QuantumSystem
+from format_utils import bump_sys, fmt_coef_latex, fmt_entry_latex, show_latex
 
 _BASIS_OPTIONS = ["comp", "hadamard", "circular"]
 _BASIS_LABELS  = {"comp": "Computational |0⟩|1⟩",
@@ -26,7 +25,6 @@ def linalg_panel():
 
     sys: QuantumSystem = st.session_state.system
     n   = sys.num_qubits
-    dim = 2 ** n
     exact = st.session_state.get("exact_mode", True)
     st.markdown("---")
 
@@ -36,10 +34,6 @@ def linalg_panel():
         active_sv = sys.active_state()
         coeffs    = state_to_display_coeffs(active_sv, basis, n)
         _state_eq(coeffs, active_sv, basis, n, exact)
-
-    st.markdown("---")
-    with st.expander("Edit operation matrix (code)", expanded=False):
-        _code_editor(sys, n, dim)
 
 
 # ── LaTeX helpers ─────────────────────────────────────────────────────────────
@@ -67,19 +61,23 @@ def _mat_latex(M: sp.Matrix, exact: bool, max_dim: int = 4) -> str:
 
 def _state_eq(coeffs: sp.Matrix, active_sv: sp.Matrix, basis: str, n: int, exact: bool):
     dim = len(coeffs)
-    # basis vectors = columns of change-of-basis matrix
-    basis_vecs = [display_coeffs_to_state(_basis_vec(dim, i), basis, n) for i in range(dim)]
-    if dim <= 4:
-        terms = []
-        for i, (c, bv) in enumerate(zip(coeffs, basis_vecs)):
-            if i:
-                terms.append("+")
-            terms.append(_v(c, exact))
-            terms.append(_vec_latex([_v(bv[j], exact) for j in range(dim)]))
-        terms += ["=", _vec_latex([_v(active_sv[i], exact) for i in range(dim)])]
-        st.latex(" ".join(terms))
-    else:
-        st.latex("|\\psi\\rangle = " + _vec_latex([_v(active_sv[i], exact) for i in range(dim)]))
+    psi_vec = _vec_latex([_v(active_sv[i], exact) for i in range(dim)])
+    t1, t2 = st.tabs(["Compact  |ψ⟩", "Expanded  Σ cᵢ·eᵢ = ψ"])
+    with t1:
+        st.latex("|\\psi\\rangle = " + psi_vec)
+    with t2:
+        if dim <= 4:
+            basis_vecs = [display_coeffs_to_state(_basis_vec(dim, i), basis, n) for i in range(dim)]
+            terms = []
+            for i, (c, bv) in enumerate(zip(coeffs, basis_vecs)):
+                if i:
+                    terms.append("+")
+                terms.append(fmt_coef_latex(c, exact))
+                terms.append(_vec_latex([_v(bv[j], exact) for j in range(dim)]))
+            terms += ["=", psi_vec]
+            st.latex(" ".join(terms))
+        else:
+            st.latex("\\sum_i c_i \\cdot e_i = " + psi_vec)
 
 
 def _step_eq(sys: QuantumSystem, basis: str, n: int, exact: bool):
@@ -110,7 +108,7 @@ def _step_eq(sys: QuantumSystem, basis: str, n: int, exact: bool):
                 if i:
                     parts.append("+")
                 Gev_simp = sp.Matrix([sp.simplify(Gev[j]) for j in range(dim)])
-                parts.append(_v(c, exact) + "\\cdot" +
+                parts.append(fmt_coef_latex(c, exact) + "\\cdot" +
                               _vec_latex([_v(Gev_simp[j], exact) for j in range(dim)]))
             st.latex(" ".join(parts) + " = " + psi_out)
         else:
@@ -134,35 +132,3 @@ def _basis_vec(dim: int, i: int) -> sp.Matrix:
     return v
 
 
-# ── code editor ───────────────────────────────────────────────────────────────
-
-def _code_editor(sys: QuantumSystem, n: int, dim: int):
-    default_M    = sys.composed_matrix() if sys.gate_history else sp.eye(dim)
-    default_code = _m2code(default_M)
-    st.caption("SymPy or NumPy expression. Variables: `sp` (sympy), `np` (numpy).")
-    code = st.text_area("Matrix code", value=default_code,
-                        height=max(120, (dim + 4) * 18), key="la_code",
-                        label_visibility="collapsed")
-    if st.button("Parse & validate", key="la_parse"):
-        try:
-            M = parse_matrix_code(code)
-        except ValueError as e:
-            st.error(str(e)); return
-        if M.shape != (dim, dim):
-            st.error(f"Expected {dim}×{dim}, got {M.shape}"); return
-        if not is_unitary(M):
-            st.error("Not unitary — U†U ≠ I"); return
-        new_sv = sp.Matrix([sp.simplify(x) for x in (M * sys.initial_state)])
-        op     = GateOp("U", tuple(range(n)), full_matrix=M)
-        st.session_state.system = QuantumSystem(
-            n, new_sv, [op], 1, initial_state=sys.initial_state)
-        bump_sys()
-        st.success("✓ Unitary. State updated.")
-        st.rerun()
-
-
-def _m2code(M: sp.Matrix) -> str:
-    rows = ",\n".join(
-        "    [" + ", ".join(str(M[i, j]) for j in range(M.shape[1])) + "]"
-        for i in range(M.shape[0]))
-    return f"sp.Matrix([\n{rows}\n])"

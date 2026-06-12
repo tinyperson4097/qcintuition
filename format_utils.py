@@ -59,6 +59,20 @@ def fmt_entry_latex(c, exact: bool = True) -> str:
         return sp.latex(c)
 
 
+def fmt_coef_latex(c, exact: bool = True) -> str:
+    """LaTeX for a coefficient multiplying a ket/vector.
+
+    Sums (1/2 + i/2) and negative-leading terms must be parenthesized or the
+    multiplication binds to the last term only.
+    """
+    s = fmt_entry_latex(c, exact)
+    if not isinstance(c, sp.Basic):
+        c = sp.sympify(c)
+    if sp.simplify(c).is_Add or s.lstrip().startswith("-"):
+        return r"\left(" + s + r"\right)"
+    return s
+
+
 def fmt_angle_latex(v, exact: bool = True) -> str:
     """LaTeX string for an angle in radians — recognises π-fractions from floats."""
     if not isinstance(v, sp.Basic):

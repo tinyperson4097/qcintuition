@@ -5,7 +5,7 @@ import streamlit as st
 from basis import (state_to_display_coeffs, display_coeffs_to_state,
                    basis_ket_labels, basis_ket_labels_latex)
 from quantum_core import QuantumSystem
-from format_utils import bump_sys, sync_needed, fmt_expr, fmt_entry_latex, parse_expr, show_latex
+from format_utils import bump_sys, sync_needed, fmt_expr, fmt_coef_latex, parse_expr, show_latex
 
 _BASIS_OPTIONS = ["comp", "hadamard", "circular"]
 _BASIS_LABELS  = {"comp": "Computational |0⟩|1⟩",
@@ -85,6 +85,12 @@ def braket_panel():
             except ValueError as e:
                 parse_errors.append(f"Term {idx}: {e}")
                 new_coeffs_list.append(init_coeffs[idx])
+
+    # ── live bra-ket rendering of the typed state (no gates) ──────────────────
+    if not sys.gate_history and not parse_errors:
+        labels_latex = basis_ket_labels_latex(basis, n)
+        show_latex(r"|\psi\rangle = "
+                   + _ket_expr_latex(sp.Matrix(new_coeffs_list), labels_latex, exact))
 
     # ── norm check ────────────────────────────────────────────────────────────
     new_sv_raw = sp.Matrix(new_coeffs_list)
@@ -172,5 +178,5 @@ def _ket_expr_latex(coeffs: sp.Matrix, labels_latex: list[str], exact: bool, thr
                 continue
         except Exception:
             pass
-        terms.append(rf"{fmt_entry_latex(c, exact)}{lbl}")
+        terms.append(rf"{fmt_coef_latex(c, exact)}{lbl}")
     return " + ".join(terms) if terms else "0"

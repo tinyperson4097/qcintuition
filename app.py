@@ -4,10 +4,13 @@ from panels.braket import braket_panel
 from panels.linalg import linalg_panel
 from panels.bloch import bloch_panel
 from panels.gates_ui import apply_gates_section
+from panels.qiskit_views import phase_disk_panel, qsphere_panel
+from panels.circuit import circuit_panel
+from panels.walkthrough import walkthrough_sidebar
 from format_utils import show_latex, bump_sys
 
 st.set_page_config(page_title="Quantum Intuition", layout="wide",
-                   initial_sidebar_state="collapsed")
+                   initial_sidebar_state="auto")
 
 st.markdown("""
 <style>
@@ -24,11 +27,18 @@ st.markdown("""
     padding: 0.2rem 0.4rem !important;
     font-size: 0.82rem !important;
     height: 1.9rem !important;
-    width: 10ch !important;
+    width: 12ch !important;
     min-width: 0 !important;
   }
-  div[data-testid="stTextInput"] { max-width: 6ch !important; }
+  div[data-testid="stTextInput"] { max-width: 8ch !important; }
   div[data-testid="stTextInput"] label { font-size: 0.8rem; }
+  /* sidebar walkthrough inputs need full width (override compact rule above) */
+  section[data-testid="stSidebar"] div[data-testid="stTextInput"] {
+    max-width: 100% !important;
+  }
+  section[data-testid="stSidebar"] div[data-testid="stTextInput"] input {
+    width: 100% !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -55,6 +65,11 @@ if st.session_state["_basis_sync"]:
     for _k in ("basis_bk", "basis_la", "basis_bs"):
         st.session_state[_k] = st.session_state.basis
     st.session_state["_basis_sync"] = False
+
+# ── walkthrough sidebar ───────────────────────────────────────────────────────
+
+with st.sidebar:
+    walkthrough_sidebar()
 
 # ── title + cheat sheet ───────────────────────────────────────────────────────
 
@@ -119,10 +134,24 @@ with st.container(border=True):
 st.divider()
 
 # ── three panels ──────────────────────────────────────────────────────────────
-col_bk, col_la, col_bs = st.columns(3)
-with col_bk:
-    braket_panel()
-with col_la:
-    linalg_panel()
+# Bra-Ket + Linear Algebra side by side on the left; the circuit diagram fills
+# the gap below them (Bloch on the right is taller).
+col_left, col_bs = st.columns([2, 1])
+with col_left:
+    col_bk, col_la = st.columns(2)
+    with col_bk:
+        braket_panel()
+    with col_la:
+        linalg_panel()
+    circuit_panel()
 with col_bs:
     bloch_panel()
+
+st.divider()
+
+# ── qiskit views ──────────────────────────────────────────────────────────────
+col_pd, col_qs = st.columns(2)
+with col_pd:
+    phase_disk_panel()
+with col_qs:
+    qsphere_panel()

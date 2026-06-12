@@ -3,3 +3,5 @@ sympy
 plotly
 streamlit>=1.32
 streamlit-ace
+qiskit>=1.0
+matplotlib

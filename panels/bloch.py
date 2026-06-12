@@ -34,7 +34,8 @@ def bloch_panel():
         if n > 1:
             st.markdown(f"**Qubit {q}**")
         fig = _bloch_fig(*bvecs[q])
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False},
+                        key=f"bloch_fig_{q}")
 
     # ── angle display / sliders ───────────────────────────────────────────────
     st.markdown("---")
@@ -73,7 +74,10 @@ def bloch_panel():
         st.markdown("**Gate effects**")
         cur = sys.current_step
         for i, op in enumerate(sys.gate_history):
-            desc = BLOCH_EFFECT.get(op.name, f"{op.name} — unitary transform")
+            if op.name.startswith("M") and op.name[1:] in ("0", "1"):
+                desc = f"measurement → {op.name[1]} — projects and renormalizes"
+            else:
+                desc = BLOCH_EFFECT.get(op.name, f"{op.name} — unitary transform")
             lbl  = op.label_latex()
             if i == cur:
                 st.markdown(f"**→ Step {i+1}:**")

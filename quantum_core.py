@@ -49,6 +49,8 @@ class GateOp:
             axis  = name[1]            # "Rx" → "x"
             angle = fmt_angle_latex(self.phi)
             return f"R_{{{axis},{idx}}}({angle})"
+        if name in ("M0", "M1"):
+            return rf"M_{{{idx}}}{{=}}{name[1]}"
         if name.endswith("†"):
             base = name[:-1]
             return (f"{base}^\\dagger_{{{idx}}}" if len(base) == 1
@@ -116,8 +118,22 @@ class QuantumSystem:
 
 
 def _simp_vec(v: sp.Matrix) -> sp.Matrix:
-    """Simplify each element of a column vector."""
-    return sp.Matrix([sp.simplify(v[i]) for i in range(v.shape[0])])
+    """Simplify each element of a column vector.
+
+    Full sp.simplify is fast for 1-2 qubits but drags at dim 8/16, so larger
+    vectors get a lighter expand/powsimp/radsimp pass instead.
+    """
+    if v.shape[0] <= 4:
+        return sp.Matrix([sp.simplify(v[i]) for i in range(v.shape[0])])
+    return sp.Matrix([_light_simp(v[i]) for i in range(v.shape[0])])
+
+
+def _light_simp(e: sp.Expr) -> sp.Expr:
+    """Cheap simplification: combines products of roots/exponentials and
+    cancels expanded sums without the full simplify search."""
+    e = sp.expand(e)
+    e = sp.powsimp(e)
+    return sp.radsimp(e)
 
 
 # ── gate expansion ────────────────────────────────────────────────────────────
@@ -283,6 +299,47 @@ def apply_custom_gate(
         current_step=system.current_step,
         initial_state=system.initial_state,
     )
+
+
+def measurement_probs(system: QuantumSystem, qubit_index: int) -> tuple:
+    """Exact (P0, P1) for measuring one qubit in the computational basis."""
+    rho = _reduced_density_matrix(system.state_vector, qubit_index,
+                                  system.num_qubits)
+    return (sp.simplify(sp.re(rho[0, 0])), sp.simplify(sp.re(rho[1, 1])))
+
+
+def measure_qubit(
+    system: QuantumSystem,
+    qubit_index: int,
+    outcome: int | None = None,
+) -> tuple[QuantumSystem, int, tuple]:
+    """Projective measurement of one qubit in the computational basis.
+
+    Returns (new_system, outcome, (P0, P1)). With outcome=None the result is
+    sampled from the Born probabilities. The collapse is recorded as a GateOp
+    whose matrix is the projector scaled by 1/√p — linear though not unitary,
+    which keeps step-through and undo working.
+    """
+    probs = measurement_probs(system, qubit_index)
+    if outcome is None:
+        import random
+        outcome = 1 if random.random() < float(probs[1]) else 0
+    p = probs[outcome]
+    if float(p) < 1e-12:
+        raise ValueError(f"Outcome {outcome} has probability 0")
+    proj = sp.zeros(2, 2)
+    proj[outcome, outcome] = sp.Integer(1)
+    M = build_full_gate(proj, (qubit_index,), system.num_qubits) / sp.sqrt(p)
+    new_sv = _simp_vec(M * system.state_vector)
+    op = GateOp(name=f"M{outcome}", qubit_indices=(qubit_index,),
+                full_matrix=M)
+    return QuantumSystem(
+        num_qubits=system.num_qubits,
+        state_vector=new_sv,
+        gate_history=system.gate_history + [op],
+        current_step=system.current_step,
+        initial_state=system.initial_state,
+    ), outcome, probs
 
 
 def set_state_from_bloch(

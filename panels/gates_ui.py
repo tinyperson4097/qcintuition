@@ -1,7 +1,8 @@
 """Gate application section."""
 import sympy as sp
 import streamlit as st
-from quantum_core import QuantumSystem, apply_gate, apply_custom_gate
+from quantum_core import (QuantumSystem, apply_gate, apply_custom_gate,
+                          measure_qubit, measurement_probs)
 from gates import ALL_GATE_NAMES, BLOCH_EFFECT
 from format_utils import bump_sys, parse_expr, parse_matrix_code
 
@@ -103,3 +104,34 @@ def apply_gates_section():
     effect = BLOCH_EFFECT.get(gate, "")
     if effect:
         st.caption(f"**{gate}:** {effect}")
+
+    _measure_row(st.session_state.system)
+
+
+def _measure_row(sys: QuantumSystem):
+    """Projective measurement controls: live Born probabilities + collapse."""
+    col_q, col_p, col_btn, col_out = st.columns([1.2, 2.7, 0.7, 1.4])
+    with col_q:
+        mq = st.selectbox("Measure qubit", list(range(sys.num_qubits)),
+                          key="meas_q")
+    p0, p1 = measurement_probs(sys, mq)
+    with col_p:
+        st.markdown("<div style='padding-top:1.7rem'></div>",
+                    unsafe_allow_html=True)
+        st.latex(rf"P(0) = {sp.latex(p0)},\quad P(1) = {sp.latex(p1)}")
+    with col_btn:
+        st.markdown("<div style='padding-top:1.7rem'></div>",
+                    unsafe_allow_html=True)
+        if st.button("Measure", key="meas_btn"):
+            new_sys, outcome, _ = measure_qubit(sys, mq)
+            new_sys.current_step = len(new_sys.gate_history)
+            st.session_state.system = new_sys
+            st.session_state["last_meas"] = (mq, outcome)
+            bump_sys()
+            st.rerun()
+    with col_out:
+        st.markdown("<div style='padding-top:1.7rem'></div>",
+                    unsafe_allow_html=True)
+        last = st.session_state.get("last_meas")
+        if last is not None:
+            st.markdown(f"last: qubit {last[0]} → **{last[1]}**")
